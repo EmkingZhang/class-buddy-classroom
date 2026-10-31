@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Class Buddy · 连接码</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; }
+
+    .card {
+      position: fixed; inset: 0;
+      margin: 4px;
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 14px;
+      padding: 12px 14px;
+      color: #fff;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+    .title { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+    .code {
+      font-size: 22px; font-weight: 700; letter-spacing: 1px;
+      color: #7dd3fc; font-family: Consolas, Menlo, monospace;
+      user-select: text; -webkit-app-region: no-drag;
+      word-break: break-all;
+    }
+    .hint { font-size: 11px; color: #9ca3af; margin-top: 6px; line-height: 1.6; }
+    .actions { display: flex; gap: 8px; margin-top: 10px; -webkit-app-region: no-drag; }
+    .btn {
+      padding: 4px 12px; border: none; border-radius: 8px;
+      font-size: 12px; cursor: pointer; background: #374151; color: #e5e7eb;
+    }
+    .btn:hover { background: #4b5563; }
+    .btn.danger { background: #991b1b; }
+    .btn.danger:hover { background: #b91c1c; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">Class Buddy 教室端 · 连接码</div>
+    <div class="code" id="code">获取中…</div>
+    <div class="hint" id="hint">办公室浏览器打开 <span id="url"></span>，输入上方连接码即可发布通知</div>
+    <div class="actions">
+      <button class="btn" id="btn-hide">隐藏</button>
+      <button class="btn danger" id="btn-exit">退出程序</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+    (function () {
+      const codeEl = document.getElementById('code');
+      const urlEl = document.getElementById('url');
+
+      function refresh() {
+        window.announcer.getInfo().then((info) => {
+          if (!info || !info.code) return;
+          codeEl.textContent = info.code;
+          urlEl.textContent = 'http://' + info.code.split('-')[0];
+        });
+      }
+
+      document.getElementById('btn-hide').addEventListener('click', () => window.announcer.hideCorner());
+      document.getElementById('btn-exit').addEventListener('click', () => {
+        window.announcer.exit();
+      });
+
+      refresh();
+      setInterval(refresh, 5000); // Token 被重置时同步刷新
+    })();
+  </script>
+</body>
+</html>

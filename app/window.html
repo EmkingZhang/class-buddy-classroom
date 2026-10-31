@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Class Buddy · 通知展示</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e17; }
+    body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; }
+
+    #overlay {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: 6vh 8vw;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    #overlay.visible { opacity: 1; pointer-events: auto; }
+
+    #overlay.normal { background: #ffffff; }
+    #overlay.urgent { background: #fff7f5; }
+
+    #badge {
+      display: none;
+      background: #b91c1c; color: #fff;
+      font-size: 3.2vh; font-weight: 700;
+      padding: 1.2vh 3vw; border-radius: 999px;
+      margin-bottom: 4vh; letter-spacing: 0.2em;
+    }
+    #overlay.urgent #badge { display: inline-block; animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+    #title { color: #111827; font-size: 8vh; font-weight: 700; line-height: 1.25; margin-bottom: 3vh; max-width: 90vw; }
+    #overlay.urgent #title { color: #b91c1c; }
+    #body { color: #374151; font-size: 4.6vh; line-height: 1.7; max-width: 86vw; white-space: pre-wrap; word-break: break-word; }
+    #overlay.urgent #body { color: #7f1d1d; }
+    #meta {
+      position: fixed; bottom: 3vh; width: 100%; text-align: center;
+      color: #6b7280; font-size: 2.2vh;
+    }
+    #meta .close-hint { margin-left: 2vw; opacity: 0.85; }
+    #cd {
+      position: fixed; right: 4vw; bottom: 7vh;
+      background: rgba(17,24,39,0.78); color: #fff;
+      font-size: 4.5vh; font-weight: 700;
+      padding: 1.4vh 2.4vh; border-radius: 14px;
+      line-height: 1; display: none;
+    }
+
+    /* ---- 随机点名：全屏动画（亮色青春风） ---- */
+    #rollover {
+      position: fixed; inset: 0; z-index: 200;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      background:
+        radial-gradient(circle at 18% 22%, rgba(255,183,77,0.6), transparent 45%),
+        radial-gradient(circle at 82% 18%, rgba(255,94,160,0.55), transparent 45%),
+        radial-gradient(circle at 15% 82%, rgba(64,170,255,0.55), transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(150,96,255,0.55), transparent 45%),
+        linear-gradient(160deg, #fff7e6 0%, #ffe3ee 30%, #e0ecff 65%, #f0fff4 100%);
+      user-select: none;
+    }
+    #rollover.show { display: flex; }
+    #rollover canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    /* 关闭：右上角 */
+    #btn-roll-close {
+      position: absolute; top: 2.6vh; right: 2.6vw; z-index: 5;
+      font-size: 2.4vh; font-weight: 700; padding: 1vh 2.2vw;
+      border: none; border-radius: 999px; cursor: pointer;
+      background: rgba(17,24,39,0.72); color: #fff;
+    }
+    #btn-roll-close:hover { background: rgba(17,24,39,0.9); }
+    #roll-title {
+      position: relative; color: #5b46d6;
+      font-size: 3.4vh; letter-spacing: 0.4em; margin-bottom: 3vh;
+    }
+    #roll-body {
+      position: relative; width: 92vw; max-width: 1400px;
+      display: flex; flex-direction: row; align-items: center; justify-content: center;
+      gap: 3vw;
+    }
+    /* 左侧：幸运儿（本轮已点，竖排） */
+    #roll-picked {
+      width: 17vw; max-width: 240px; max-height: 58vh;
+      overflow-y: auto; display: none; flex-direction: column; align-items: flex-start;
+    }
+    #roll-picked.show { display: flex; }
+    #roll-picked-title { color: #8b7be0; font-size: 2.6vh; font-weight: 700; letter-spacing: 0.25em; margin-bottom: 1.4vh; }
+    #roll-picked-list { display: flex; flex-direction: column; align-items: flex-start; gap: 1vh; width: 100%; }
+    .roll-pick-chip {
+      background: #ffffffcc; border: 1.5px solid #b9a8f0; color: #5b46d6;
+      border-radius: 999px; padding: 0.5vh 1.4vw; font-size: 2.4vh; font-weight: 600;
+    }
+    /* 右侧主舞台：名字 + 控件 */
+    #roll-stage { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+    #roll-name {
+      position: relative; color: #3a2bb8; font-size: 8.5vh; font-weight: 900;
+      text-shadow: 0 0 24px rgba(90,70,214,0.35), 0 0 70px rgba(255,94,160,0.35);
+      line-height: 1.15; min-height: 14vh; max-width: 60vw;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5vw 2vw;
+    }
+    #roll-name .roll-final-name { white-space: nowrap; }
+    #roll-name.fixed { animation: rollpop 0.45s ease; }
+    @keyframes rollpop {
+      0% { transform: scale(0.55); opacity: 0.4; }
+      60% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    /* 控件：数量下拉 / 开始-暂停 / 重置（靠右） */
+    #roll-controls {
+      position: relative; margin-top: 3vh;
+      display: flex; align-items: center; gap: 1.2vw; flex-wrap: wrap; justify-content: center;
+    }
+    #roll-controls label { color: #6b5fd0; font-size: 2.4vh; font-weight: 700; letter-spacing: 0.1em; }
+    #roll-controls select, #roll-controls input[type="number"] {
+      font-size: 2.2vh; padding: 0.7vh 0.8vw; border-radius: 8px;
+      border: 1.5px solid #c7b8f0; background: #fff; color: #3a2bb8; outline: none;
+    }
+    #roll-controls button {
+      font-size: 2.3vh; font-weight: 700; padding: 0.9vh 2vw; border: none;
+      border-radius: 999px; cursor: pointer;
+    }
+    #btn-roll-pick { background: #5b46d6; color: #fff; box-shadow: 0 4px 14px rgba(91,70,214,0.35); min-width: 11vw; }
+    #btn-roll-pick:hover { background: #4a36c0; }
+    #btn-roll-reset { background: #fff; color: #5b46d6; border: 2px solid #5b46d6 !important; margin-left: 4vw; }
+    #btn-roll-reset:hover { background: #f0ecff; }
+    #roll-count {
+      position: relative; margin-top: 1.6vh; color: #9ca3af; font-size: 1.8vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div id="badge">紧急通知</div>
+    <div id="title"></div>
+    <div id="body"></div>
+  </div>
+  <div id="meta"><span id="time-text"></span><span id="sender-text"></span><span class="close-hint" id="close-hint"></span></div>
+  <div id="cd">20</div>
+
+  <div id="rollover">
+    <canvas id="particles"></canvas>
+    <button id="btn-roll-close">关闭</button>
+    <div id="roll-title">随机点名</div>
+    <div id="roll-body">
+      <div id="roll-picked">
+        <div id="roll-picked-title">幸运儿</div>
+        <div id="roll-picked-list"></div>
+      </div>
+      <div id="roll-stage">
+        <div id="roll-name"></div>
+        <div id="roll-controls">
+          <label for="roll-count-select">随机选</label>
+          <select id="roll-count-select">
+            <option value="1">1 人</option>
+            <option value="2">2 人</option>
+            <option value="5">5 人</option>
+            <option value="10">10 人</option>
+            <option value="custom">自定义</option>
+          </select>
+          <input type="number" id="roll-custom-count" min="1" max="99" placeholder="人数" style="display:none" />
+          <button id="btn-roll-pick">开始</button>
+          <button id="btn-roll-reset">重置</button>
+        </div>
+        <div id="roll-count"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+    (function () {
+      const overlay = document.getElementById('overlay');
+      const titleEl = document.getElementById('title');
+      const bodyEl = document.getElementById('body');
+      const timeText = document.getElementById('time-text');
+      const senderText = document.getElementById('sender-text');
+      const closeHint = document.getElementById('close-hint');
+      const cdEl = document.getElementById('cd');
+      let countdownTimer = null;
+      let countdownInterval = null;
+      let speechLoop = false;
+
+      function stopCountdown() {
+        clearTimeout(countdownTimer);
+        clearInterval(countdownInterval);
+        countdownTimer = null;
+        countdownInterval = null;
+        if (cdEl) cdEl.style.display = 'none';
+      }
+
+      /** 实时倒计时，归零自动关闭；超过 1 分钟用 分:秒 显示 */
+      function startCountdown(sec) {
+        stopCountdown();
+        let remain = Math.max(1, Math.floor(Number(sec) || 20));
+        const fmtMMSS = (s) => {
+          const m = Math.floor(s / 60);
+          const ss = String(s % 60).padStart(2, '0');
+          return m + ':' + ss;
+        };
+        const paint = () => {
+          if (cdEl) {
+            cdEl.textContent = remain >= 60 ? fmtMMSS(remain) : String(remain);
+            cdEl.style.display = 'block';
+          }
+          closeHint.textContent = remain + ' 秒后自动关闭 · 点击任意处立即关闭';
+        };
+        const closeNow = () => {
+          stopCountdown();
+          stopSpeech(); // 归零时同时停掉循环语音
+          window.announcer.hideDisplay();
+        };
+        paint();
+        countdownInterval = setInterval(() => {
+          remain -= 1;
+          if (remain <= 0) { closeNow(); return; }
+          paint();
+        }, 1000);
+        countdownTimer = setTimeout(closeNow, sec * 1000);
+      }
+
+      function fmt(d) {
+        const p = (n) => String(n).padStart(2, '0');
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+          ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+      }
+
+      // ---------- 提示音：预设铃声（Web Audio 合成，零资源）+ AI 语音朗读（系统 TTS） ----------
+      const SOUNDS = {
+        dingdong: [[880, 0], [660, 0.18]],
+        bell: [[523, 0], [659, 0.22], [784, 0.44]],
+        alarm: [[1046, 0], [1046, 0.18], [1046, 0.36], [1046, 0.54]]
+      };
+
+      let melodyTimer = null;
+      let melodyCtx = null;
+
+      /** 提示音：按循环设置播放（loop=0 循环到通知结束；loop=N 响 N 遍后停止） */
+      function playMelody(notes, loop) {
+        stopMelody();
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          const ctx = new Ctx();
+          melodyCtx = ctx;
+          let remain = Number(loop) > 0 ? Number(loop) : Infinity;
+          const total = Math.max.apply(null, (notes || []).map((n) => n[1])) + 0.55;
+          const once = () => {
+            (notes || []).forEach(([freq, t]) => {
+              const o = ctx.createOscillator();
+              const g = ctx.createGain();
+              o.type = 'sine';
+              o.connect(g);
+              g.connect(ctx.destination);
+              o.frequency.value = freq;
+              g.gain.setValueAtTime(0.32, ctx.currentTime + t);
+              g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.45);
+              o.start(ctx.currentTime + t);
+              o.stop(ctx.currentTime + t + 0.55);
+            });
+          };
+          const tick = () => {
+            if (!melodyCtx || remain <= 0) { stopMelody(); return; }
+            once();
+            remain -= 1;
+            if (remain > 0) melodyTimer = setTimeout(tick, total * 1000);
+          };
+          tick();
+        } catch (e) { /* 无声环境忽略 */ }
+      }
+
+      function stopMelody() {
+        clearTimeout(melodyTimer);
+        clearInterval(melodyTimer);
+        melodyTimer = null;
+        if (melodyCtx) {
+          try { melodyCtx.close(); } catch (e) { /* 忽略 */ }
+          melodyCtx = null;
+        }
+      }
+
+      /** 停止语音与铃声（含循环） */
+      function stopSpeech() {
+        speechLoop = false;
+        stopMelody();
+        try {
+          if (window.speechSynthesis) window.speechSynthesis.cancel();
+        } catch (e) { /* 忽略 */ }
+      }
+
+      /** 循环朗读：loop=0 循环到通知结束；loop=N 读 N 遍后停止
+       *  纯定时调度：不依赖 speechSynthesis 的 onend/onerror（部分 Windows 语音不触发），按字数估算时长，保证循环次数确定生效
+       *  role：可选 { pitch, rate, volume } 角色音色参数 */
+      function speakLoop(text, loop, role) {
+        stopSpeech();
+        const synth = window.speechSynthesis;
+        if (!synth || !text) return;
+        speechLoop = true;
+        const pitch = role && isFinite(Number(role.pitch)) ? Math.min(2, Math.max(0, Number(role.pitch))) : 1;
+        const rate = role && isFinite(Number(role.rate)) ? Math.min(2, Math.max(0.5, Number(role.rate))) : 1;
+        const volume = role && role.volume != null && isFinite(Number(role.volume)) ? Math.min(1, Math.max(0, Number(role.volume))) : 1;
+        let remain = Number(loop) > 0 ? Number(loop) : Infinity;
+        let timer = null;
+        const speakOnce = () => {
+          if (!speechLoop) return;
+          try { synth.cancel(); } catch (e) { /* 忽略 */ }
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = 'zh-CN';
+          u.rate = rate;
+          u.pitch = pitch;
+          u.volume = volume;
+          const voices = synth.getVoices().filter((v) => /^zh/i.test(v.lang));
+          if (voices.length) u.voice = voices[voices.length - 1]; // 优先新版本中文语音
+          try { synth.speak(u); } catch (e) { speechLoop = false; return; }
+          const dur = Math.max(2500, Math.min(40000, Math.ceil(text.length * 420 / Math.max(0.5, rate))));
+          timer = setTimeout(() => {
+            if (!speechLoop) return;
+            remain -= 1;
+            try { synth.cancel(); } catch (e) { /* 忽略 */ }
+            if (remain > 0) setTimeout(speakOnce, 2000); // 固定 2 秒间隔后循环
+            else speechLoop = false;
+          }, dur);
+        };
+        speakOnce();
+      }
+
+      function playSound(p) {
+        const sound = p.sound || (p.level === 'urgent' ? 'alarm' : 'none');
+        if (sound === 'tts') {
+          speakLoop(p.ttsText || [p.title, p.body].filter(Boolean).join('。'), p.ttsLoop);
+        } else if (sound !== 'none') {
+          // 铃声：1 遍/3 遍按次数响；「直到结束」循环到通知结束/关闭时停止
+          playMelody(SOUNDS[sound] || SOUNDS.alarm, p.ttsLoop);
+        }
+      }
+
+      function showNotice(p) {
+        overlay.className = p.level === 'urgent' ? 'visible urgent' : 'visible normal';
+        // 背景：默认纯白；若用户上传过大屏背景则叠加浅色罩+图（带时间戳防缓存）
+        const probe = new Image();
+        probe.onload = () => {
+          overlay.style.backgroundImage =
+            "linear-gradient(rgba(255,255,255,0.55), rgba(255,255,255,0.75)), url('public/bg-display.jpg?v=" + Date.now() + "')";
+        };
+        probe.onerror = () => { overlay.style.backgroundImage = 'none'; };
+        probe.src = 'public/bg-display.jpg?v=' + Date.now();
+        titleEl.textContent = p.title || '';
+        bodyEl.textContent = p.body || '';
+        timeText.textContent = '发布时间 ' + fmt(new Date());
+        senderText.textContent = p.senderName ? ' · 发布者：' + p.senderName : '';
+
+        stopCountdown();
+        closeHint.textContent = '';
+
+        playSound(p);
+
+        let sec;
+        if (p.displaySeconds != null) {
+          sec = Number(p.displaySeconds) > 0 ? Number(p.displaySeconds) : 0; // 0=不限时
+        } else {
+          sec = p.level === 'urgent' ? 0 : (Number(p.autoCloseSeconds) > 0 ? Number(p.autoCloseSeconds) : 20);
+        }
+        if (sec > 0) startCountdown(sec);
+        else closeHint.textContent = '点击任意处关闭';
+      }
+
+      overlay.addEventListener('click', () => {
+        stopSpeech();
+        window.announcer.hideDisplay();
+      });
+
+      // ---------- 随机点名 ----------
+      const rollover = document.getElementById('rollover');
+      const rollName = document.getElementById('roll-name');
+      const rollCount = document.getElementById('roll-count');
+      const rollSelect = document.getElementById('roll-count-select');
+      const rollCustom = document.getElementById('roll-custom-count');
+      const rollPickedWrap = document.getElementById('roll-picked');
+      const rollPickedList = document.getElementById('roll-picked-list');
+      const btnPick = document.getElementById('btn-roll-pick');
+      const btnReset = document.getElementById('btn-roll-reset');
+      const btnClose = document.getElementById('btn-roll-close');
+      const pcanvas = document.getElementById('particles');
+      let rollPool = [];       // 未点池（已点名的会被移除，不重复点名）
+      let rollPicked = [];     // 本轮已点名（追加保留在页面）
+      let rollGender = 'all';
+      let rollTimer = null;
+      let rollState = 'off';   // off | rolling | fixed
+      let thisPickN = 1;       // 本次随机数量
+      let partCtx = null;
+      let partAnim = null;
+      let partParts = [];
+
+      window.announcer.rollCall().catch(() => {}); // 预热 IPC（可选）
+
+      function genderText(g) {
+        return g === 'all' ? '全部同学 ' : (g === 'male' ? '男生 ' : '女生 ');
+      }
+
+      // 当前选择的随机数量（自定义取输入框，兜底 1）
+      function currentPickCount() {
+        if (rollSelect.value === 'custom') {
+          const v = Math.floor(Number(rollCustom.value) || 0);
+          return Math.max(1, Math.min(99, v));
+        }
+        return Number(rollSelect.value) || 1;
+      }
+
+      function renderPicked() {
+        rollPickedList.innerHTML = '';
+        rollPicked.forEach((name) => {
+          const c = document.createElement('span');
+          c.className = 'roll-pick-chip';
+          c.textContent = name;
+          rollPickedList.appendChild(c);
+        });
+        rollPickedWrap.className = rollPicked.length ? 'show' : '';
+      }
+
+      function updateCounts() {
+        const total = rollPool.length + rollPicked.length;
+        rollCount.textContent = genderText(rollGender) + '共 ' + total + ' 人 · 未点 ' + rollPool.length + ' 人';
+      }
+
+      // 打开/重置点名页：加载过滤后的名单作为池，清空已点（新一轮）
+      function startRoll(pool, gender) {
+        if (!pool.length) {
+          rollover.className = 'show';
+          rollName.textContent = '暂无名单';
+          rollCount.textContent = '';
+          btnPick.textContent = '开始';
+          rollState = 'fixed';
+          return;
+        }
+        rollPool = pool.slice();
+        rollPicked = [];
+        rollGender = gender;
+        rollState = 'off';
+        rollover.className = 'show';
+        rollName.textContent = '';
+        rollName.classList.remove('fixed');
+        btnPick.textContent = '开始';
+        renderPicked();
+        updateCounts();
+      }
+
+      // 开始滚动（开始按钮 / 定格后点击屏幕继续）
+      function beginPick() {
+        if (rollState === 'rolling') return;
+        if (!rollPool.length) {
+          rollName.textContent = '本轮已全部点完';
+          rollState = 'fixed';
+          return;
+        }
+        thisPickN = Math.min(currentPickCount(), rollPool.length);
+        rollState = 'rolling';
+        rollName.textContent = '';
+        rollName.classList.remove('fixed');
+        btnPick.textContent = '暂停';
+        startDiceSound(); // 掷色子音效：滚动期间持续咔嗒声
+        startParticles();
+        rollTimer = setInterval(() => {
+          if (rollState !== 'rolling') return;
+          const s = rollPool[Math.floor(Math.random() * rollPool.length)];
+          rollName.textContent = s.name;
+        }, 80);
+      }
+
+      // 定格：从池随机取 N 个不重复，追加到本轮已点并移出池
+      function fixPick() {
+        if (rollState !== 'rolling') return;
+        clearInterval(rollTimer);
+        rollTimer = null;
+        const n = Math.min(thisPickN, rollPool.length);
+        const pool = rollPool.slice();
+        const picked = [];
+        for (let i = 0; i < n && pool.length; i++) {
+          picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        }
+        const pickedNames = picked.map((s) => s.name);
+        rollPool = rollPool.filter((s) => !pickedNames.includes(s.name));
+        rollPicked.push.apply(rollPicked, pickedNames);
+        renderPicked();
+        rollName.innerHTML = pickedNames.map((nm) => '<span class="roll-final-name">' + nm + '</span>').join('');
+        rollName.classList.add('fixed');
+        rollState = 'fixed';
+        stopDiceSound();
+        playDiceStop(); // 定格"叮"声
+        btnPick.textContent = '开始';
+        updateCounts();
+      }
+
+      // 点击屏幕：滚动中停止定格；定格后继续随机选。控件区点击不触发
+      rollover.addEventListener('click', (ev) => {
+        if (ev.target.closest('#roll-controls') || ev.target.closest('#roll-picked')) return;
+        if (rollState === 'rolling') fixPick();
+        else if (rollState === 'fixed') beginPick();
+      });
+
+      // 数量下拉：自定义时显示人数输入框
+      rollSelect.addEventListener('change', () => {
+        rollCustom.style.display = rollSelect.value === 'custom' ? 'inline-block' : 'none';
+      });
+
+      // 开始/暂停公用按钮：非滚动点击开始；滚动中点击暂停定格
+      btnPick.addEventListener('click', () => {
+        if (rollState === 'rolling') fixPick();
+        else beginPick();
+      });
+      btnReset.addEventListener('click', () => {
+        // 重置：恢复全部名单重新开始（新一轮），已点清空
+        window.announcer.rollCall().then((students) => {
+          const pool = (students || []).filter((s) => rollGender === 'all' || s.gender === rollGender);
+          startRoll(pool, rollGender);
+        }).catch(() => startRoll([], rollGender));
+      });
+      btnClose.addEventListener('click', () => {
+        stopRoll();
+        window.announcer.hideDisplay(); // 关闭点名页，本轮结束
+      });
+
+      // ---------- 掷色子音效（点名滚动期咔嗒声 + 定格"定"音） ----------
+      let diceTimer = null;
+      let diceCtx = null;
+
+      function startDiceSound() {
+        stopDiceSound();
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          diceCtx = new Ctx();
+          const tick = () => {
+            if (!diceCtx) return;
+            const dur = 0.035;
+            const buf = diceCtx.createBuffer(1, Math.floor(diceCtx.sampleRate * dur), diceCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) * 0.9;
+            const src = diceCtx.createBufferSource();
+            src.buffer = buf;
+            const g = diceCtx.createGain();
+            g.gain.value = 0.45;
+            src.connect(g);
+            g.connect(diceCtx.destination);
+            src.start();
+          };
+          tick();
+          diceTimer = setInterval(() => { if (diceCtx) tick(); }, 110);
+        } catch (e) { /* 无声环境忽略 */ }
+      }
+
+      function stopDiceSound() {
+        clearInterval(diceTimer);
+        diceTimer = null;
+        if (diceCtx) {
+          try { diceCtx.close(); } catch (e) { /* 忽略 */ }
+          diceCtx = null;
+        }
+      }
+
+      /** 定格音：短促上扬"叮"一声（880→1320Hz 快速衰减），突出选中 */
+      function playDiceStop() {
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          const ctx = new Ctx();
+          const t0 = ctx.currentTime;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(880, t0);
+          o.frequency.exponentialRampToValueAtTime(1320, t0 + 0.12);
+          g.gain.setValueAtTime(0.4, t0);
+          g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start(t0);
+          o.stop(t0 + 0.3);
+          setTimeout(() => { try { ctx.close(); } catch (e) { /* 忽略 */ } }, 400);
+        } catch (e) { /* 无声环境忽略 */ }
+      }
+
+      function stopRoll() {
+        rollState = 'off';
+        clearInterval(rollTimer);
+        rollTimer = null;
+        stopDiceSound();
+        stopParticles();
+        rollover.className = '';
+        rollName.textContent = '';
+        rollName.classList.remove('fixed');
+        rollPool = [];
+        rollPicked = [];
+        rollPickedList.innerHTML = '';
+        rollPickedWrap.className = '';
+        rollCustom.style.display = 'none';
+        rollSelect.value = '1';
+        btnPick.textContent = '开始';
+      }
+
+      function startParticles() {
+        const c = pcanvas;
+        const dpr = window.devicePixelRatio || 1;
+        c.width = c.clientWidth * dpr;
+        c.height = c.clientHeight * dpr;
+        partCtx = c.getContext('2d');
+        partCtx.scale(dpr, dpr);
+        partParts = [];
+        const n = Math.min(90, Math.floor(c.clientWidth / 14));
+        for (let i = 0; i < n; i++) {
+          partParts.push({
+            x: Math.random() * c.clientWidth,
+            y: Math.random() * c.clientHeight,
+            r: 0.8 + Math.random() * 2.2,
+            vy: 0.2 + Math.random() * 0.8,
+            a: 0.15 + Math.random() * 0.5
+          });
+        }
+        const draw = () => {
+          if (!partCtx || rollState === 'off') return;
+          partCtx.clearRect(0, 0, c.clientWidth, c.clientHeight);
+          for (const p of partParts) {
+            p.y -= p.vy;
+            if (p.y < -4) p.y = c.clientHeight + 4;
+            partCtx.beginPath();
+            partCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            partCtx.fillStyle = 'rgba(91,70,214,' + p.a + ')';
+            partCtx.fill();
+          }
+          partAnim = requestAnimationFrame(draw);
+        };
+        draw();
+      }
+
+      function stopParticles() {
+        if (partAnim) cancelAnimationFrame(partAnim);
+        partAnim = null;
+        partCtx = null;
+      }
+
+      window.announcer.onAnnouncement((p) => showNotice(p));
+
+      // 控制端发起的随机点名
+      window.announcer.onRollCallStart((p) => {
+        if (rollState !== 'off') stopRoll();
+        const gender = (p && p.gender) || 'all';
+        window.announcer.rollCall().then((students) => {
+          const pool = (students || []).filter((s) => gender === 'all' || s.gender === gender);
+          startRoll(pool, gender);
+        }).catch(() => startRoll([], gender));
+      });
+    })();
+  </script>
+</body>
+</html>

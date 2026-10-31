@@ -1,0 +1,174 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: #f0f2f5;
+  color: #1f2329;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+.page { max-width: 1700px; margin: 0 auto; padding: 20px 16px 60px; }
+
+/* 16:9 宽屏双栏：左发布 / 右记录（记录栏更宽，比例固定） */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+}
+.header h1 { font-size: 20px; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 14px; font-size: 12px;
+  background: #e5e7eb; color: #4b5563;
+}
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+.badge.online { background: #e6f6ec; color: #0e7a41; }
+.badge.online .dot { background: #22c55e; }
+.badge.offline { background: #fdecec; color: #c0392b; }
+.badge.offline .dot { background: #ef4444; }
+
+.hint-inclass {
+  background: #fff8e6; color: #b26a00; border: 1px solid #f0cf94;
+  padding: 3px 10px; border-radius: 14px; font-size: 12px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 10px rgba(15,23,42,0.06);
+  border-radius: 12px;
+  padding: 16px; margin-bottom: 16px;
+}
+.card h2 { font-size: 15px; margin-bottom: 12px; }
+
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: 13px; color: #4b5563; margin-bottom: 4px; }
+.form-row label .opt { color: #9ca3af; font-weight: normal; }
+
+input[type="text"], input[type="password"], input[type="datetime-local"], select, textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid #d1d5db;
+  border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff;
+}
+textarea { min-height: 84px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; }
+
+.row2 { display: flex; gap: 12px; flex-wrap: wrap; }
+.row2 > div { flex: 1; min-width: 160px; }
+
+.radio-group { display: flex; gap: 18px; align-items: center; padding-top: 4px; }
+.radio-group label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #1f2329; margin: 0; }
+
+/* 选项按钮组（替代下拉框） */
+.btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt-btn { position: relative; }
+.opt-btn input { position: absolute; opacity: 0; pointer-events: none; }
+.opt-btn span {
+  display: inline-block; padding: 7px 15px;
+  border: 1px solid #d1d5db; border-radius: 8px;
+  background: #fff; cursor: pointer; font-size: 13px; color: #374151;
+  user-select: none;
+}
+.opt-btn span:hover { border-color: #93c5fd; }
+.opt-btn input:checked + span { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+.btn {
+  padding: 9px 22px; border: none; border-radius: 8px; font-size: 14px;
+  cursor: pointer; background: #2563eb; color: #fff;
+}
+.btn:hover { background: #1d4ed8; }
+.btn.secondary { background: #e5e7eb; color: #1f2329; }
+.btn.secondary:hover { background: #d1d5db; }
+.btn.danger { background: #dc2626; }
+.btn.danger:hover { background: #b91c1c; }
+.btn.sm { padding: 5px 14px; font-size: 13px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #f0f2f5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+th { color: #6b7280; font-weight: 500; }
+#records-body td:first-child, #records-body th:first-child { width: 96px; }
+#records-body td:nth-child(2), #records-body th:nth-child(2) { width: 54px; }
+#records-body td:nth-child(3), #records-body th:nth-child(3) { width: 54px; }
+#records-body td:nth-child(4), #records-body th:nth-child(4) { width: 340px; }
+#records-body td:nth-child(5), #records-body th:nth-child(5) { width: 56px; }
+#records-body td:nth-child(6), #records-body th:nth-child(6) { width: 120px; }
+.btn.tight { padding: 5px 8px; }
+/* 名单表格 */
+table.mini td, table.mini th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.mini th:first-child, table.mini td:first-child { width: 110px; }
+table.mini th:nth-child(2), table.mini td:nth-child(2) { width: 150px; }
+table.mini th:nth-child(3), table.mini td:nth-child(3) { width: 70px; }
+
+.st-badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #f3f4f6; color: #4b5563; }
+.st-shown { background: #e6f6ec; color: #0e7a41; }
+.st-scheduled { background: #e8f0fe; color: #1f56b3; }
+.st-expired { background: #f3f4f6; color: #9ca3af; }
+
+.muted { color: #9ca3af; font-size: 12px; }
+
+/* modal */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal { background: #fff; border-radius: 12px; padding: 20px; width: 560px; max-width: 92vw; }
+.modal h3 { font-size: 15px; margin-bottom: 10px; }
+.modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.modal p { font-size: 13px; color: #6b7280; line-height: 1.7; margin-bottom: 10px; }
+.hidden { display: none !important; }
+/* 可编辑区（标题/正文）：名字区 + 文本区两个并列兄弟元素（flex 同行） */
+.editable-field {
+  border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px;
+  font-size: 14px; line-height: 1.6; min-height: 38px; box-sizing: border-box;
+  background: #fff; outline: none; word-break: break-all;
+  cursor: text;
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0 4px;
+}
+.editable-field:focus-within { border-color: #2563eb; }
+.editable-field.body { min-height: 108px; }
+/* 名字区：只放选中的名字框（整体不可编辑），与文本区并列，光标永不进入 */
+.editable-field .names-zone { display: block; }
+/* 文本区：唯一可编辑区域，光标/中文输入法永远只在这里；
+   block 布局保证正文按 Enter 能正常换行（inline 元素内 Enter 不产生换行） */
+.editable-field .text-zone {
+  display: block; flex: 1 1 auto; min-width: 4px; outline: none; white-space: pre-wrap;
+}
+.editable-field .text-zone:empty::before { content: attr(data-ph); color: #9ca3af; pointer-events: none; }
+/* 点名的名字框：独立边框，右上角小 × 删除；框为不可编辑元素，后续输入不带样式 */
+.name-tag {
+  display: inline-block; position: relative;
+  border: 1px solid #34d399; background: #f0fdf4; color: #166534;
+  border-radius: 5px; padding: 0 5px; margin: 0 4px;
+  line-height: 1.6; font-weight: 600; white-space: nowrap;
+  vertical-align: baseline;
+}
+.name-tag .name-x {
+  position: absolute; top: -8px; right: -7px;
+  width: 15px; height: 15px; line-height: 14px; text-align: center;
+  background: #9ca3af; color: #fff; border-radius: 50%;
+  font-size: 11px; font-weight: 700; cursor: pointer; user-select: none;
+  box-sizing: border-box;
+}
+.name-tag .name-x:hover { background: #ef4444; }
+/* 点名册：名字网格，一屏显示完，不滚动不分页 */
+.pick-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;
+}
+.pick-item {
+  padding: 5px 14px; border: 1px solid #d1d5db; border-radius: 999px;
+  cursor: pointer; font-size: 14px; color: #374151; background: #fff; user-select: none;
+}
+.pick-item:hover { border-color: #2563eb; color: #2563eb; }
+.pick-item.sel { background: #dcfce7; border-color: #86efac; color: #166534; font-weight: 600; }
