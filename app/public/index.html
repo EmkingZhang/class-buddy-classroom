@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Class Buddy · 开屏通知</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <h1>Class Buddy · 开屏通知<span id="ver-badge" class="muted" style="font-size:13px;font-weight:400;margin-left:8px;"></span></h1>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span id="conn-badge" class="badge offline"><span class="dot"></span><span id="conn-text">未连接</span></span>
+        <button class="btn secondary sm" id="btn-connect">连接码</button>
+        <a href="settings.html" style="font-size:13px;color:#2563eb;">更换背景</a>
+        <button class="btn secondary sm" id="btn-update">检查更新</button>
+        <span id="update-info" class="muted" style="font-size:12px;"></span>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- 左栏：发布 + 昵称 -->
+      <div>
+        <div class="card">
+          <h2>发布通知</h2>
+          <div class="form-row">
+            <label>标题（≤50字）<span class="opt">（输入 /name 可点名）</span></label>
+            <div id="f-title" class="editable-field" data-placeholder="例如：下午课后服务调整通知">
+              <div class="names-zone" contenteditable="false"></div>
+              <div class="text-zone" contenteditable="true" data-ph="例如：下午课后服务调整通知"></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>正文（≤500字）<span class="opt">（输入 /name 可点名）</span></label>
+            <div id="f-body" class="editable-field body" data-placeholder="输入通知内容…">
+              <div class="names-zone" contenteditable="false"></div>
+              <div class="text-zone" contenteditable="true" data-ph="输入通知内容…"></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>提示音</label>
+            <div class="btn-group" id="grp-sound">
+              <label class="opt-btn"><input type="radio" name="sound" value="none" checked /><span>无声</span></label>
+              <label class="opt-btn"><input type="radio" name="sound" value="dingdong" /><span>叮咚</span></label>
+              <label class="opt-btn"><input type="radio" name="sound" value="bell" /><span>上课铃</span></label>
+              <label class="opt-btn"><input type="radio" name="sound" value="alarm" /><span>警报</span></label>
+              <label class="opt-btn"><input type="radio" name="sound" value="tts" /><span>AI 语音朗读</span></label>
+            </div>
+          </div>
+          <div class="form-row" id="row-tts-extra">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+              <div>
+                <label style="display:block;font-size:13px;color:#4b5563;margin-bottom:4px;">朗读循环</label>
+                <div class="btn-group" id="grp-ttsloop">
+                  <label class="opt-btn"><input type="radio" name="ttsloop" value="0" checked /><span>直到结束</span></label>
+                  <label class="opt-btn"><input type="radio" name="ttsloop" value="1" /><span>1 遍</span></label>
+                  <label class="opt-btn"><input type="radio" name="ttsloop" value="3" /><span>3 遍</span></label>
+                </div>
+              </div>
+              <div style="flex:1;min-width:220px;">
+                <label style="display:block;font-size:13px;color:#4b5563;margin-bottom:4px;">朗读文字 <span class="opt">（留空则读标题+正文）</span></label>
+                <input type="text" id="f-tts" maxlength="200" placeholder="例如：同学们请注意，三分钟后大课间开始" />
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>显示时长</label>
+            <div class="btn-group" id="grp-display">
+              <label class="opt-btn"><input type="radio" name="display" value="30" checked /><span>30 秒</span></label>
+              <label class="opt-btn"><input type="radio" name="display" value="60" /><span>1 分钟</span></label>
+              <label class="opt-btn"><input type="radio" name="display" value="300" /><span>5 分钟</span></label>
+              <label class="opt-btn"><input type="radio" name="display" value="1800" /><span>30 分钟</span></label>
+              <label class="opt-btn"><input type="radio" name="display" value="0" /><span>不限时间</span></label>
+            </div>
+          </div>
+          <div class="form-row row2">
+            <div>
+              <label>定时发送 <span class="opt">（可选）</span></label>
+              <input type="datetime-local" id="f-sendat" />
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <button class="btn" id="btn-publish">发布</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>我的信息</h2>
+          <div class="form-row">
+            <label>我的昵称 <span class="opt">（绑定本机 IP，记录显示昵称；留空保存=显示 IP）</span></label>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="f-nick" maxlength="20" placeholder="例如：李老师" />
+              <button class="btn secondary" id="btn-nick-save" style="white-space:nowrap;">保存</button>
+            </div>
+            <div id="nick-info" class="muted" style="margin-top:6px;"></div>
+          </div>
+          <div class="form-row" style="margin-top:12px;">
+            <label>被控班级 <span class="opt">（绑定到当前教室 IP，记录显示班级名）</span></label>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="f-class" maxlength="20" placeholder="例如：三（2）班" />
+              <button class="btn secondary" id="btn-class-save" style="white-space:nowrap;">保存</button>
+            </div>
+            <div id="class-info" class="muted" style="margin-top:6px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右栏：发送记录 + 班级名单 -->
+      <div>
+        <div class="card">
+          <h2 style="display:flex;align-items:center;justify-content:space-between;">发送记录
+            <button class="btn secondary sm" id="btn-records-clear">清空记录</button>
+          </h2>
+          <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>时间</th><th>班级</th><th>发送者</th><th>标题</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody id="records-body"></tbody>
+          </table>
+          </div>
+          <div id="records-empty" class="muted" style="padding:12px 0;">暂无记录</div>
+          <div id="pager" style="display:flex;align-items:center;gap:10px;margin-top:12px;justify-content:flex-end;">
+            <button class="btn secondary sm" id="pg-prev">上一页</button>
+            <span id="pg-info" class="muted">第 1/1 页</span>
+            <button class="btn secondary sm" id="pg-next">下一页</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>班级名单 <span class="opt">（随机点名用 · 共 <span id="students-count">0</span> 人）</span></h2>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px;">
+            <span id="students-info" class="muted" style="flex:1;"></span>
+            <button class="btn" id="btn-students-add">添加名单</button>
+            <button class="btn secondary" id="btn-students-copy">复制全部名单</button>
+            <button class="btn secondary" id="btn-students-clear">清空名单</button>
+          </div>
+          <table class="mini" id="students-table" style="display:none;">
+            <thead><tr><th>学号</th><th>姓名</th><th>性别</th></tr></thead>
+            <tbody id="students-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 点名（/name 指令） -->
+  <div id="pick-modal" class="modal-mask hidden">
+    <div class="modal">
+      <h3>点名 <span class="opt">（点击名字选中/取消，可多选）</span></h3>
+      <div id="pick-empty" class="muted" style="padding:14px 0;display:none;">名单为空，请先到「班级名单」添加学生</div>
+      <div id="pick-list" class="pick-grid"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
+        <span id="pick-count" class="muted" style="font-size:13px;flex:1;">已选 0 人</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="btn-pick-cancel">取消</button>
+        <button class="btn" id="btn-pick-ok">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加名单 -->
+  <div id="students-modal" class="modal-mask hidden">
+    <div class="modal">
+      <h3>添加名单</h3>
+      <div class="form-row">
+        <label>粘贴名单，每行一个：<b>学号,姓名,性别</b>（性别填 男 / 女；也支持空格或 Tab 分隔）<br />也可点「导入 CSV/Excel」，解析结果会填入下方输入框，确认后保存</label>
+        <textarea id="m-students" rows="6" placeholder="01,王小明,男&#10;02,李小红,女&#10;03,张伟,男"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <input type="file" id="m-students-file" accept=".csv,.xlsx,.xls" style="display:none;" />
+        <button class="btn secondary sm" id="btn-m-file">导入 CSV/Excel</button>
+        <span id="m-file-info" class="muted" style="font-size:12px;"></span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="btn-m-cancel">取消</button>
+        <button class="btn secondary" id="btn-m-append">追加保存</button>
+        <button class="btn" id="btn-m-overwrite">覆盖保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接码 -->
+  <div id="connect-modal" class="modal-mask hidden">
+    <div class="modal">
+      <h3>输入连接码</h3>
+      <p id="connect-tip">在教室电脑屏幕右下角（或教室端目录下「连接码.txt」）查看连接码，例如 <b>192.168.1.50:8787-K8M3</b>，整体粘贴进来即可。</p>
+      <div class="form-row">
+        <input type="text" id="connect-input" placeholder="连接码，如 192.168.1.50:8787-K8M3" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="btn-connect-cancel">取消</button>
+        <button class="btn" id="btn-connect-ok">连接</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 角色音色已下线（v1.0 移除） -->
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
