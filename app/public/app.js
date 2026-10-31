@@ -43,23 +43,27 @@
       verifyAndSave(tk);
     } else {
       // 只输入了 Token（本页已是目标教室）
-      verifyAndSave(raw.trim());
+      verifyAndSave(raw);
     }
   }
 
   function verifyAndSave(tk) {
-    api('/api/verify-token', { method: 'POST', body: JSON.stringify({ token: tk }) })
-      .then((r) => {
-        if (r.ok) {
-          token = tk;
-          localStorage.setItem(TOKEN_KEY, tk);
-          $('connect-modal').classList.add('hidden');
-          $('connect-input').value = '';
-          refreshAll();
-        } else {
-          alert('连接码不正确，请核对后重试');
-        }
-      }).catch(() => alert('无法连接教室，请检查网络与连接码'));
+    fetch('/api/verify-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: tk })
+    }).then((r) => r.json()).then((d) => {
+      if (d.ok) {
+        token = tk;
+        localStorage.setItem(TOKEN_KEY, tk);
+        if (params.get('token')) history.replaceState(null, '', location.pathname);
+        $('connect-modal').classList.add('hidden');
+        $('connect-input').value = '';
+        refreshAll();
+      } else {
+        alert('连接码不正确，请核对后重试');
+      }
+    }).catch(() => alert('无法连接教室，请检查网络与连接码'));
   }
 
   $('btn-connect').addEventListener('click', showConnectModal);
