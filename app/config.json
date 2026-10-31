@@ -1,0 +1,21 @@
+{
+  "port": 8787,
+  "roomId": "room-1",
+  "normalSeconds": 20,
+  "urgentSeconds": 0,
+  "urgentSound": true,
+  "autoStart": true,
+  "showCorner": true,
+  "defaultSchedule": [
+    { "weekday": 1, "start": "08:00", "end": "12:00" },
+    { "weekday": 1, "start": "14:00", "end": "17:30" },
+    { "weekday": 2, "start": "08:00", "end": "12:00" },
+    { "weekday": 2, "start": "14:00", "end": "17:30" },
+    { "weekday": 3, "start": "08:00", "end": "12:00" },
+    { "weekday": 3, "start": "14:00", "end": "17:30" },
+    { "weekday": 4, "start": "08:00", "end": "12:00" },
+    { "weekday": 4, "start": "14:00", "end": "17:30" },
+    { "weekday": 5, "start": "08:00", "end": "12:00" },
+    { "weekday": 5, "start": "14:00", "end": "17:30" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "class-buddy-classroom",
+  "version": "1.0.27",
+  "private": true,
+  "description": "Class Buddy 开屏通知 · 教室端（接收端 + 服务端，Electron，零手动配置）",
+  "main": "main.js"
+}
