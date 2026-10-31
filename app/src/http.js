@@ -1,260 +1,356 @@
 'use strict';
 /**
- * http.js — 教室端 HTTP 路由与 API（无鉴权：GET /api/status、/api/records；
- * 需鉴权：/api/publish、/api/settings、/api/students、/api/background、/api/update 等）
+ * http.js — 静态页面（发布面板）+ REST API（v0.2，无 WebSocket、无 target 概念）
+ * 教室端就是服务端：办公室浏览器直接访问本服务完成发布。
  */
 const fs = require('fs');
 const path = require('path');
-const { store, config, genCode } = require('./store');
+const url = require('url');
 const pkg = require('../package.json');
 
-const ROOT = path.join(__dirname, '..');
-
-function json(res, code, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(code, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(body)
-  });
-  res.end(body);
-}
-
-function readBody(req) {
-  return new Promise((resolve) => {
-    let size = 0;
-    const chunks = [];
-    req.on('data', (c) => {
-      size += c.length;
-      if (size > 8 * 1024 * 1024) { req.destroy(); return; }
-      chunks.push(c);
-    });
-    req.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-      catch (e) { resolve({}); }
-    });
-    req.on('error', () => resolve({}));
-  });
-}
-
-function isAuthed(req) {
-  const u = new URL(req.url, 'http://x');
-  const tk = req.headers['x-token'] || u.searchParams.get('token') || '';
-  return tk && tk === store.getToken();
-}
-
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
   '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png'
+  '.ico': 'image/x-icon'
 };
 
-function serveFile(req, res, rel) {
-  const file = path.join(ROOT, rel);
-  if (!file.startsWith(ROOT)) { json(res, 403, { ok: false, error: 'forbidden' }); return; }
-  fs.readFile(file, (err, data) => {
-    if (err) { json(res, 404, { ok: false, error: 'not found' }); return; }
-    const ext = path.extname(file).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Content-Length': data.length
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    let tooBig = false;
+    req.on('data', (c) => {
+      if (!tooBig) {
+        body += c;
+        if (body.length > 15 * 1024 * 1024) tooBig = true; // 15MB：背景图 base64 需要大请求体
+      }
     });
-    res.end(data);
+    req.on('end', () => {
+      if (tooBig) {
+        const e = new Error('body too large');
+        e.status = 413;
+        reject(e);
+      } else {
+        resolve(body);
+      }
+    });
+    req.on('error', reject);
   });
 }
 
-/** 判断当前是否在课时中（上课时间提醒，不做硬限制） */
-function inClassNow() {
-  const s = require('./schedule');
-  return s.inClassNow();
+function json(res, code, obj) {
+  const payload = JSON.stringify(obj);
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(payload)
+  });
+  res.end(payload);
 }
 
-function handle(req, res, listeners, deps) {
-  const ctx = Object.assign({
-    store, config, genCode,
-    onDisplay: listeners.onDisplay,
-    onRollCall: listeners.onRollCall,
-    onUpdateCheck: deps.onUpdateCheck || (() => Promise.resolve({ ok: false, error: 'not supported' })),
-    onUpdate: deps.onUpdate || (() => Promise.resolve({ ok: false, error: 'not supported' }))
-  }, deps || {});
-  const url = new URL(req.url, 'http://x');
-  const p = url.pathname;
+function cors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Token');
+}
 
-  // ---------- 静态文件（发布面板等） ----------
-  if (req.method === 'GET' && (p === '/' || p === '/index.html')) { serveFile(req, res, 'public/index.html'); return; }
-  if (req.method === 'GET' && p === '/app.js') { serveFile(req, res, 'public/app.js'); return; }
-  if (req.method === 'GET' && p === '/style.css') { serveFile(req, res, 'public/style.css'); return; }
-  if (req.method === 'GET' && p === '/settings.html') { serveFile(req, res, 'public/settings.html'); return; }
-  if (req.method === 'GET' && p === '/settings.js') { serveFile(req, res, 'public/settings.js'); return; }
-  if (req.method === 'GET' && p === '/vendor/xlsx.full.min.js') { serveFile(req, res, 'public/vendor/xlsx.full.min.js'); return; }
-  if (req.method === 'GET' && p === '/bg-display.jpg') { serveFile(req, res, 'public/bg-display.jpg'); return; }
-  if (req.method === 'GET' && p === '/window.html') { serveFile(req, res, 'window.html'); return; }
-  if (req.method === 'GET' && p === '/corner.html') { serveFile(req, res, 'corner.html'); return; }
+function isAuthed(req, store) {
+  const u = url.parse(req.url, true);
+  const token = req.headers['x-token'] || u.query.token;
+  return !!token && token === store.getToken();
+}
 
-  // ---------- 免鉴权 ----------
-  if (req.method === 'GET' && p === '/api/status') {
-    json(res, 200, {
-      ok: true,
-      version: pkg.version,
+/** 请求来源 IP（IPv4 直连 / 经 IPv6 映射） */
+function clientIpOf(req) {
+  return String((req.socket && req.socket.remoteAddress) || '127.0.0.1').replace(/^::ffff:/, '');
+}
+
+function serveStatic(req, res, pathname, publicDir) {
+  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const resolved = path.resolve(publicDir, rel);
+  if (resolved !== publicDir && !resolved.startsWith(publicDir + path.sep)) {
+    res.writeHead(403);
+    res.end('forbidden');
+    return;
+  }
+  fs.readFile(resolved, (err, buf) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('not found');
+      return;
+    }
+    const ext = path.extname(resolved).toLowerCase();
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': 'no-cache'
+    });
+    res.end(buf);
+  });
+}
+
+/**
+ * @param {http.IncomingMessage} req
+ * @param {http.ServerResponse} res
+ * @param {object} ctx { store, schedule, publish, getCode }
+ */
+async function handle(req, res, ctx) {
+  cors(res);
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  const { store, schedule, publish, getCode } = ctx;
+  const publicDir = ctx.publicDir || path.join(__dirname, '..', 'public');
+  const u = url.parse(req.url, true);
+  let pathname;
+  try {
+    pathname = decodeURIComponent(u.pathname);
+  } catch (e) {
+    pathname = u.pathname;
+  }
+
+  // ---- 静态页面 ----
+  if (!pathname.startsWith('/api/')) return serveStatic(req, res, pathname, publicDir);
+
+  // ---- GET /api/status ----
+  if (pathname === '/api/status' && req.method === 'GET') {
+    const inClass = schedule.inClassTime(new Date(), store.getSchedule());
+    return json(res, 200, {
       roomId: store.getRoomId(),
-      inClass: inClassNow(),
+      version: pkg.version,
+      inClass,
       schedule: store.getSchedule(),
-      code: genCode(),
-      clientIp: req.socket.remoteAddress ? String(req.socket.remoteAddress).replace(/^::ffff:/, '') : '',
+      code: getCode(),
+      clientIp: clientIpOf(req),
       senders: store.getSenders(),
       classrooms: store.getClassrooms(),
       now: new Date().toISOString()
     });
-    return;
   }
 
-  if (req.method === 'POST' && p === '/api/verify-token') {
-    return readBody(req).then((b) => {
-      const ok = b.token === store.getToken();
-      json(res, 200, { ok });
-    });
+  // ---- GET /api/records ----
+  if (pathname === '/api/records' && req.method === 'GET') {
+    const limit = Math.min(Number(u.query.limit) || 50, 500);
+    return json(res, 200, { records: store.listAnnouncements(limit) });
   }
 
-  if (req.method === 'GET' && p === '/api/records') {
-    const limit = Math.min(1000, Math.max(1, parseInt(url.searchParams.get('limit') || '100', 10) || 100));
-    json(res, 200, { ok: true, records: store.getRecords().slice(-limit).reverse() });
-    return;
+  // ---- POST /api/records/delete（删除单条发送记录） ----
+  if (pathname === '/api/records/delete' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const id = String(body.id || '').trim();
+    if (!id) return json(res, 400, { error: 'id required' });
+    return json(res, 200, { ok: store.deleteAnnouncement(id), id });
   }
 
-  // ---------- 需鉴权 ----------
-  if (!isAuthed(req)) { json(res, 401, { ok: false, error: 'unauthorized' }); return; }
-
-  if (req.method === 'GET' && p === '/api/students') {
-    json(res, 200, { ok: true, students: store.getStudents() });
-    return;
+  // ---- POST /api/records/clear（清空发送记录） ----
+  if (pathname === '/api/records/clear' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    const count = store.clearAnnouncements();
+    return json(res, 200, { ok: true, cleared: count });
   }
 
-  if (req.method === 'POST' && p === '/api/students') {
-    return readBody(req).then((b) => {
-      const mode = b.mode === 'overwrite' ? 'overwrite' : 'append';
-      store.saveStudents(b.students || [], mode);
-      json(res, 200, { ok: true, students: store.getStudents() });
-    });
+  // ---- POST /api/verify-token ----
+  if (pathname === '/api/verify-token' && req.method === 'POST') {
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) { /* ignore */ }
+    return json(res, 200, { ok: !!body.token && body.token === store.getToken() });
   }
 
-  if (req.method === 'POST' && p === '/api/publish') {
-    return readBody(req).then((b) => {
-      const title = String(b.title || '').trim().slice(0, 50);
-      if (!title) { json(res, 400, { ok: false, error: '标题不能为空' }); return; }
-      const body = String(b.body || '').trim().slice(0, 500);
-      const sound = ['dingdong', 'bell', 'alarm', 'tts', 'none'].includes(b.sound) ? b.sound : 'none';
-      const now = new Date();
-      const rec = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        level: 'normal',
-        title,
-        body,
-        sound,
-        ttsText: String(b.ttsText || '').slice(0, 200) || null,
-        ttsLoop: Number(b.ttsLoop) || 0,
-        displaySeconds: b.displaySeconds == null || b.displaySeconds === '' ? null : Number(b.displaySeconds),
-        sendAt: b.sendAt || null,
-        senderIp: req.socket.remoteAddress ? String(req.socket.remoteAddress).replace(/^::ffff:/, '') : '',
-        classroomIp: b.classroomIp || null,
-        status: 'created',
-        createdAt: now.toISOString(),
-        displayAt: null
-      };
-      store.addRecord(rec);
-      if (rec.sendAt) {
-        const t = new Date(rec.sendAt).getTime() - now.getTime();
-        if (t > 0) {
-          rec.status = 'scheduled';
-          setTimeout(() => {
-            if (store.getRecords().find((r) => r.id === rec.id)) {
-              rec.status = 'shown';
-              rec.displayAt = new Date().toISOString();
-              listeners.onDisplay(Object.assign({}, rec, { sound: sound === 'none' ? null : sound }));
-            }
-          }, Math.min(t, 24 * 3600 * 1000));
-          json(res, 200, { ok: true, status: 'scheduled', id: rec.id });
-          return;
-        }
-      }
-      rec.status = 'shown';
-      rec.displayAt = new Date().toISOString();
-      listeners.onDisplay(Object.assign({}, rec, { sound: sound === 'none' ? null : sound }));
-      json(res, 200, { ok: true, status: 'shown', id: rec.id });
-    });
+  // ---- POST /api/publish ----
+  if (pathname === '/api/publish' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const { level, title, body: text, expireAt, sendAt, sound, ttsText, ttsLoop, displaySeconds, classroomIp } = body;
+    if (level !== 'normal' && level !== 'urgent') return json(res, 400, { error: 'invalid level' });
+    if (!title || !String(title).trim()) return json(res, 400, { error: 'title required' });
+    if (String(title).trim().length > 50) return json(res, 400, { error: 'title too long (<=50)' });
+    if (String(text || '').trim().length > 500) return json(res, 400, { error: 'body too long (<=500)' });
+    const SOUNDS = ['none', 'dingdong', 'bell', 'alarm', 'tts'];
+    if (sound && !SOUNDS.includes(sound)) return json(res, 400, { error: 'invalid sound' });
+    if (String(ttsText || '').trim().length > 200) return json(res, 400, { error: 'ttsText too long (<=200)' });
+    const loop = ttsLoop === undefined ? 0 : Number(ttsLoop);
+    if (!Number.isInteger(loop) || loop < 0 || loop > 10) return json(res, 400, { error: 'ttsLoop must be 0-10' });
+    const dsec = displaySeconds === undefined ? null : Number(displaySeconds);
+    if (dsec !== null && (!Number.isInteger(dsec) || dsec < 0 || dsec > 3600)) {
+      return json(res, 400, { error: 'displaySeconds must be 0-3600 (0=不限时)' });
+    }
+    return json(res, 200, publish({
+      level,
+      title: String(title).trim(),
+      body: String(text || '').trim(),
+      expireAt: expireAt || null,
+      sendAt: sendAt || null,
+      // 未显式指定声音时：普通无声、紧急默认警报（兼容旧行为）
+      sound: sound || (level === 'urgent' ? 'alarm' : 'none'),
+      ttsText: String(ttsText || '').trim() || null,
+      ttsLoop: loop,
+      displaySeconds: dsec,
+      senderIp: clientIpOf(req),
+      classroomIp: String(classroomIp || '').trim() || null
+    }));
   }
 
-  if (req.method === 'POST' && p === '/api/records/delete') {
-    return readBody(req).then((b) => {
-      store.removeRecord(b.id);
-      json(res, 200, { ok: true });
-    });
+  // ---- POST /api/sender（昵称绑定 IP，昵称可留空=不绑定） ----
+  if (pathname === '/api/sender' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const ip = String(body.ip || '').trim();
+    const nickname = String(body.nickname || '').trim();
+    if (!ip) return json(res, 400, { error: 'ip required' });
+    if (nickname.length > 20) return json(res, 400, { error: 'nickname too long (<=20)' });
+    return json(res, 200, { ok: true, senders: store.setSender(ip, nickname) });
   }
 
-  if (req.method === 'POST' && p === '/api/records/clear') {
-    return readBody(req).then(() => {
-      store.clearRecords();
-      json(res, 200, { ok: true });
-    });
+  // ---- POST /api/classroom（班级名绑定被控端 IP，留空=解除） ----
+  if (pathname === '/api/classroom' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const ip = String(body.ip || '').trim();
+    const name = String(body.name || '').trim();
+    if (!ip) return json(res, 400, { error: 'ip required' });
+    if (name.length > 20) return json(res, 400, { error: 'class name too long (<=20)' });
+    return json(res, 200, { ok: true, classrooms: store.setClassroom(ip, name) });
   }
 
-  if (req.method === 'POST' && p === '/api/sender') {
-    return readBody(req).then((b) => {
-      store.setSender(b.ip, b.nickname);
-      json(res, 200, { ok: true, senders: store.getSenders() });
-    });
+  // ---- GET /api/students / POST /api/students（班级名单，覆盖导入） ----
+  if (pathname === '/api/students' && req.method === 'GET') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    return json(res, 200, { students: store.getStudents() });
+  }
+  if (pathname === '/api/students' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const list = Array.isArray(body.students) ? body.students : null;
+    if (!list) return json(res, 400, { error: 'students array required' });
+    if (list.length > 2000) return json(res, 400, { error: 'too many students (<=2000)' });
+    const mode = body.mode === 'append' ? 'append' : 'overwrite';
+    const cleaned = [];
+    for (const s of list) {
+      const no = String((s && s.no) || '').trim();
+      const name = String((s && s.name) || '').trim();
+      const gender = String((s && s.gender) || '').trim();
+      if (!no && !name) continue;
+      if (String(name).length > 20) return json(res, 400, { error: 'student name too long' });
+      if (gender && gender !== 'male' && gender !== 'female') return json(res, 400, { error: 'gender must be male/female' });
+      cleaned.push({ no: no.slice(0, 20), name: name.slice(0, 20), gender: gender || 'male' });
+    }
+    return json(res, 200, { ok: true, count: store.setStudents(cleaned, mode) });
   }
 
-  if (req.method === 'POST' && p === '/api/classroom') {
-    return readBody(req).then((b) => {
-      store.setClassroom(b.ip, b.name);
-      json(res, 200, { ok: true, classrooms: store.getClassrooms() });
-    });
+  // ---- POST /api/background（更换背景图：panel=发布面板 / display=大屏弹窗） ----
+  if (pathname === '/api/background' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const target = body.target === 'display' ? 'display' : 'panel';
+    const data = String(body.data || '');
+    if (!data) return json(res, 400, { error: 'image data required' });
+    const buf = Buffer.from(data, 'base64');
+    if (buf.length === 0) return json(res, 400, { error: 'empty image' });
+    if (buf.length > 5 * 1024 * 1024) return json(res, 400, { error: 'image too large (<=5MB)' });
+    const isJpeg = buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+    const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+    if (!isJpeg && !isPng) return json(res, 400, { error: 'only jpg/png allowed' });
+    try {
+      fs.mkdirSync(publicDir, { recursive: true });
+      fs.writeFileSync(path.join(publicDir, 'bg-' + target + '.jpg'), buf);
+      return json(res, 200, { ok: true, target, bytes: buf.length });
+    } catch (e) {
+      return json(res, 500, { error: 'write failed: ' + (e.message || e) });
+    }
   }
 
-  if (req.method === 'POST' && p === '/api/background') {
-    return readBody(req).then((b) => {
-      const target = b.target === 'display' ? 'display' : 'panel';
-      const buf = Buffer.from(String(b.data || ''), 'base64');
-      if (!buf.length) { json(res, 400, { ok: false, error: '图片为空' }); return; }
-      if (buf.length > 5 * 1024 * 1024) { json(res, 400, { ok: false, error: '图片超过 5MB' }); return; }
-      const file = path.join(ROOT, 'public', target === 'display' ? 'bg-display.jpg' : 'bg-panel.jpg');
-      fs.writeFile(file, buf, (err) => {
-        if (err) { json(res, 500, { ok: false, error: '写入失败' }); return; }
-        json(res, 200, { ok: true, bytes: buf.length });
-      });
-    });
+  // ---- POST /api/rollcall（控制端发起随机点名：all/male/female） ----
+  if (pathname === '/api/rollcall' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const gender = String(body.gender || 'all');
+    if (!['all', 'male', 'female'].includes(gender)) return json(res, 400, { error: 'invalid gender' });
+    try { ctx.onRollCall(gender); } catch (e) { /* 回调异常不影响响应 */ }
+    return json(res, 200, { ok: true, gender });
   }
 
-  // ---------- 检查 / 领取更新（GitHub 仓库） ----------
-  if (req.method === 'POST' && p === '/api/update') {
-    return readBody(req).then((b) => {
-      const action = b.action === 'update' ? 'update' : 'check';
-      const fn = action === 'update' ? ctx.onUpdate : ctx.onUpdateCheck;
-      Promise.resolve().then(() => fn()).then((r) => {
-        json(res, 200, Object.assign({ ok: true }, r));
-      }).catch((e) => {
-        json(res, 200, { ok: false, error: String(e && e.message || e) });
-      });
-    });
+  // ---- GET/POST/DELETE /api/schedule ----
+  if (pathname === '/api/schedule' && req.method === 'GET') {
+    return json(res, 200, { schedule: store.getSchedule() });
+  }
+  if (pathname === '/api/schedule' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const weekday = Number(body.weekday);
+    const start = String(body.start || '');
+    const end = String(body.end || '');
+    if (!weekday || weekday < 1 || weekday > 7) return json(res, 400, { error: 'weekday 1-7' });
+    if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
+      return json(res, 400, { error: 'time format HH:mm' });
+    }
+    if (start >= end) return json(res, 400, { error: 'start must < end' });
+    return json(res, 200, { schedule: store.upsertSchedule({ id: body.id, weekday, start, end }) });
+  }
+  if (pathname === '/api/schedule' && req.method === 'DELETE') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    if (!u.query.id) return json(res, 400, { error: 'id required' });
+    return json(res, 200, { schedule: store.deleteSchedule(u.query.id) });
   }
 
-  if (req.method === 'POST' && p === '/api/settings') {
-    return readBody(req).then((b) => {
-      if (b.token) store.setToken(b.token);
-      if (b.normalSeconds) config.normalSeconds = Number(b.normalSeconds);
-      if (b.urgentSeconds != null) config.urgentSeconds = Number(b.urgentSeconds);
-      if (b.autoStart != null) config.autoStart = !!b.autoStart;
-      if (b.showCorner != null) config.showCorner = !!b.showCorner;
-      if (b.schedule) store.setSchedule(b.schedule);
-      store.saveConfig();
-      json(res, 200, { ok: true, code: genCode() });
-    });
+  // ---- POST /api/update（检查/领取更新：GitHub 仓库 VERSION + update 包） ----
+  if (pathname === '/api/update' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) { /* ignore */ }
+    try {
+      const r = body.action === 'check'
+        ? await ctx.onUpdateCheck()
+        : await ctx.onUpdate();
+      return json(res, 200, r);
+    } catch (e) {
+      return json(res, 200, { ok: false, error: String((e && e.message) || e) });
+    }
   }
 
-  json(res, 404, { ok: false, error: 'not found' });
+  // ---- POST /api/settings（重置 Token，返回新连接码） ----
+  if (pathname === '/api/settings' && req.method === 'POST') {
+    if (!isAuthed(req, store)) return json(res, 401, { error: 'unauthorized' });
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || '{}'); } catch (e) {
+      return json(res, 400, { error: 'invalid json' });
+    }
+    const t = String(body.token || '');
+    if (t.length < 4) return json(res, 400, { error: 'token too short (>=4)' });
+    store.setToken(t);
+    return json(res, 200, { ok: true, code: getCode() });
+  }
+
+  return json(res, 404, { error: 'not found' });
 }
 
 module.exports = { handle };
