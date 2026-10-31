@@ -162,7 +162,7 @@ function createTray() {
     buf[i * 4 + 2] = 0;   // B
     buf[i * 4 + 3] = 255; // A
   }
-  const icon = nativeImage.createFromBitmap(buf, { width: size, height: size });
+  const icon = nativeImage.createFromBitmap(buf, { size: size, size: size });
   tray = new Tray(icon);
   tray.setToolTip('Class Buddy 教室端 · ' + getCode());
   tray.setContextMenu(Menu.buildFromTemplate([

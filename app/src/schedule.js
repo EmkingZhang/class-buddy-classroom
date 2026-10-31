@@ -1,28 +1,31 @@
 'use strict';
 /**
- * schedule.js — 课时判断（仅提示用，不做硬限制）
+ * schedule.js — 上课时段判断（与 v0.1 一致）
+ * weekday 内部约定：1=周一 ... 7=周日
  */
-const { store } = require('./store');
 
-function inClassNow() {
-  try {
-    const list = store.getSchedule() || [];
-    if (!list.length) return false;
-    const now = new Date();
-    const wd = now.getDay() === 0 ? 7 : now.getDay(); // 周一=1 … 周日=7
-    const hm = now.getHours() * 60 + now.getMinutes();
-    for (const item of list) {
-      if (Number(item.weekday) !== wd) continue;
-      const [sh, sm] = String(item.start || '00:00').split(':').map((n) => parseInt(n, 10) || 0);
-      const [eh, em] = String(item.end || '23:59').split(':').map((n) => parseInt(n, 10) || 0);
-      const s = sh * 60 + sm;
-      const e = eh * 60 + em;
-      if (hm >= s && hm < e) return true;
-    }
-    return false;
-  } catch (e) {
-    return false;
-  }
+function jsDayToWeekday(date) {
+  return ((date.getDay() + 6) % 7) + 1;
 }
 
-module.exports = { inClassNow };
+function toMinutes(hhmm) {
+  const parts = String(hhmm || '00:00').split(':');
+  return Number(parts[0]) * 60 + Number(parts[1] || 0);
+}
+
+function inClassTime(date, scheduleRows) {
+  if (!Array.isArray(scheduleRows) || scheduleRows.length === 0) return null;
+  const wd = jsDayToWeekday(date);
+  const now = date.getHours() * 60 + date.getMinutes();
+  for (const row of scheduleRows) {
+    if (Number(row.weekday) !== wd) continue;
+    const start = toMinutes(row.start);
+    const end = toMinutes(row.end);
+    if (now >= start && now < end) {
+      return { weekday: wd, start: row.start, end: row.end };
+    }
+  }
+  return null;
+}
+
+module.exports = { inClassTime, jsDayToWeekday };
